@@ -35,9 +35,11 @@ The code is now on GitHub. Later, whenever the code changes, GitHub Desktop will
 5. **Create your two accounts.** Sidebar → **Authentication** → **Users** → **Add user** → **Create new user**.
    - Type your email and choose a password (8+ characters). Tick **Auto Confirm User**. Click **Create user**.
    - Repeat for your wife's email and her password. Tell her the password; she can't change it herself in version 1 (you can reset it here anytime: click the user → **Reset password**).
-6. **Copy the two values the app needs.** Sidebar → **Project Settings** (gear icon at the bottom) → **API**. (On newer dashboards it is **Project Settings → Data API** for the URL and **Project Settings → API Keys** for the key.) You need:
-   - **Project URL** (looks like `https://abcdefgh.supabase.co`)
-   - **anon public** key (a very long string starting with `eyJ`). Use the one labelled **anon** / **public**, never the **service_role** one.
+6. **Copy the two values the app needs.** Sidebar → **Project Settings** (gear icon at the bottom) → **API Keys**. You need:
+   - **Project URL**: `https://` + your project ref + `.supabase.co`. It is shown under **Project Settings → Data API**, and it is also the middle part of the dashboard's web address.
+   - **Publishable key**: on the **API Keys** page, the row named `default` under **Publishable key** (starts with `sb_publishable_`). Click the copy icon next to it. Never use the **Secret keys** row.
+
+   (Older dashboards call these "Project URL" and "anon public" key under **Project Settings → API**. Either kind of key works.)
 
    Keep this tab open; you'll paste both into Vercel next.
 
@@ -56,7 +58,7 @@ The code is now on GitHub. Later, whenever the code changes, GitHub Desktop will
      | Key | Value |
      |---|---|
      | `VITE_SUPABASE_URL` | the Project URL from Supabase |
-     | `VITE_SUPABASE_ANON_KEY` | the anon public key from Supabase |
+     | `VITE_SUPABASE_ANON_KEY` | the publishable key from Supabase |
 
    - Click **Deploy**. Wait about a minute until you see confetti.
 4. Click **Continue to Dashboard**, then click the **Visit** button (or the address under **Domains**, something like `inkwell-xxxx.vercel.app`). That is your app. Bookmark it.
