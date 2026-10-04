@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Placeholder mark: replace this file with your real logo (keep the name logo.svg). -->
+  <rect width="64" height="64" rx="12" fill="#000"/>
+  <g fill="#fff" opacity="0.9">
+    <circle cx="10" cy="10" r="2"/><circle cx="22" cy="8" r="2"/><circle cx="54" cy="12" r="2"/>
+    <circle cx="8" cy="30" r="2"/><circle cx="56" cy="34" r="2"/><circle cx="12" cy="54" r="2"/>
+    <circle cx="52" cy="54" r="2"/><circle cx="32" cy="58" r="2"/><circle cx="44" cy="6" r="2"/>
+  </g>
+  <path d="M32 14 C 32 14, 20 30, 20 38 a12 12 0 0 0 24 0 C 44 30, 32 14, 32 14 Z" fill="#d68e9e"/>
+</svg>

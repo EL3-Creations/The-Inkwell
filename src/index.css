@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --color-accent: #d68e9e;        /* soft dusty rose: the bow */
+  --color-accent-soft: #f7e6ea;
+  --color-accent-deep: #b86a7c;
+  --font-brand: Georgia, "Times New Roman", serif;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: #fff;
+  color: #000;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Polka-dot bands */
+.dots {
+  background-color: #000;
+  background-image: radial-gradient(#fff 1.6px, transparent 1.8px);
+  background-size: 16px 16px;
+}
+.dots-light {
+  background-color: #fff;
+  background-image: radial-gradient(rgba(0,0,0,0.10) 1.6px, transparent 1.8px);
+  background-size: 16px 16px;
+}
+.dots-rose {
+  background-color: var(--color-accent-soft);
+  background-image: radial-gradient(var(--color-accent) 1.4px, transparent 1.6px);
+  background-size: 14px 14px;
+}
+
+/* Form fields: big enough to tap, 16px text so iOS doesn't zoom */
+.field {
+  @apply w-full min-h-12 rounded-xl border-2 border-black bg-white px-3 text-base outline-none focus:ring-4 focus:ring-accent/40 disabled:bg-neutral-100 disabled:text-neutral-500;
+}
+textarea.field { @apply py-3; }
+label.lbl { @apply mb-1 block text-sm font-semibold uppercase tracking-wide text-neutral-700; }
+
+/* Safe-area padding for phones with a home bar */
+.pb-safe { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+
+/* Keep number pad buttons from being selected on fast taps */
+.no-select { user-select: none; -webkit-user-select: none; }
