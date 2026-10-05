@@ -4,7 +4,7 @@
   --color-accent: #d68e9e;        /* soft dusty rose: the bow */
   --color-accent-soft: #f7e6ea;
   --color-accent-deep: #b86a7c;
-  --font-brand: Georgia, "Times New Roman", serif;
+  --font-brand: "Great Vibes", "Brush Script MT", cursive;
 }
 
 html, body, #root { height: 100%; }
@@ -46,3 +46,6 @@ label.lbl { @apply mb-1 block text-sm font-semibold uppercase tracking-wide text
 
 /* Keep number pad buttons from being selected on fast taps */
 .no-select { user-select: none; -webkit-user-select: none; }
+
+/* Script lettering: one weight only, so never fake-bold it; a touch of spacing keeps it readable */
+.font-brand { font-weight: 400; letter-spacing: 0.01em; }

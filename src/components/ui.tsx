@@ -47,7 +47,7 @@ export function PageHeader({ title, right, sub }: { title: string; right?: React
     <div className="mb-4">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-brand text-3xl font-bold leading-tight">{title}</h1>
+          <h1 className="font-brand text-4xl leading-tight md:text-5xl">{title}</h1>
           {sub && <p className="text-sm text-neutral-600">{sub}</p>}
         </div>
         {right && <div className="shrink-0">{right}</div>}
@@ -116,12 +116,16 @@ export function Bow({ className = 'h-5 w-5' }: { className?: string }) {
 }
 
 export function Logo({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
-  const s = size === 'lg' ? 'text-4xl' : size === 'sm' ? 'text-xl' : 'text-2xl'
+  // Large (login / setup screens): the full round logo on its own — it already says "The Ink Well · Focal Pens".
+  if (size === 'lg') {
+    return <img src="/logo.png" alt="The Inkwell — Focal Pens" className="h-48 w-48 select-none" draggable={false} />
+  }
+  const s = size === 'sm' ? 'text-3xl' : 'text-[2.1rem]'
   return (
     <div className="flex items-center gap-2">
-      <img src="/logo.svg" alt="" className={size === 'lg' ? 'h-14 w-14' : size === 'sm' ? 'h-8 w-8' : 'h-10 w-10'} />
+      <img src="/logo.png" alt="" className={size === 'sm' ? 'h-11 w-11' : 'h-12 w-12'} draggable={false} />
       <div className="leading-none">
-        <div className={`font-brand font-bold ${s}`}>The Inkwell</div>
+        <div className={`font-brand whitespace-nowrap ${s}`}>The Inkwell</div>
         <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.2em] text-neutral-600">
           Focal Pens <Bow className="h-3.5 w-3.5 text-accent" />
         </div>
