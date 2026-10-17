@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useData } from '../lib/data'
 import { saveSettings, signOut } from '../lib/api'
 import { errMsg, useToast } from '../lib/toast'
+import { parseMoney } from '../lib/format'
 import { Button, Card, Field, PageHeader, Spinner } from '../components/ui'
 
 export default function Settings({ email }: { email: string }) {
@@ -23,11 +24,16 @@ export default function Settings({ email }: { email: string }) {
 
   const usingStd = designs.filter((d) => !d.archived && d.tier === 'standard' && d.price_override == null).length
   const usingPrem = designs.filter((d) => !d.archived && d.tier === 'premium' && d.price_override == null).length
+  const stdVal = parseMoney(std)
+  const premVal = parseMoney(prem)
+  const badStd = stdVal === null || stdVal <= 0
+  const badPrem = premVal === null || premVal <= 0
 
   async function save() {
+    if (badStd || badPrem) { toast('Both tier prices must be amounts above zero.', 'error'); return }
     setBusy(true)
     try {
-      await saveSettings({ shop_name: shop.trim() || 'The Inkwell', standard_price: Number(std) || 0, premium_price: Number(prem) || 0, week_starts_on: week })
+      await saveSettings({ shop_name: shop.trim() || 'The Inkwell', standard_price: stdVal!, premium_price: premVal!, week_starts_on: week })
       toast('Settings saved')
     } catch (e) { toast(errMsg(e), 'error') } finally { setBusy(false) }
   }
@@ -37,13 +43,13 @@ export default function Settings({ email }: { email: string }) {
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader title="Settings" />
       <Card className="space-y-4">
-        <h2 className="font-brand text-xl font-bold">Prices</h2>
+        <h2 className="font-brand text-2xl">Prices</h2>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Standard" hint={`${usingStd} designs use this`}>
-            <input className="field text-xl font-bold" inputMode="decimal" value={std} onChange={(e) => setStd(e.target.value)} />
+          <Field label="Standard" hint={badStd ? 'Enter an amount above 0' : `${usingStd} designs use this`}>
+            <input className={`field text-xl font-bold ${badStd ? 'border-red-600' : ''}`} inputMode="decimal" value={std} onChange={(e) => setStd(e.target.value)} />
           </Field>
-          <Field label="Premium" hint={`${usingPrem} designs use this`}>
-            <input className="field text-xl font-bold" inputMode="decimal" value={prem} onChange={(e) => setPrem(e.target.value)} />
+          <Field label="Premium" hint={badPrem ? 'Enter an amount above 0' : `${usingPrem} designs use this`}>
+            <input className={`field text-xl font-bold ${badPrem ? 'border-red-600' : ''}`} inputMode="decimal" value={prem} onChange={(e) => setPrem(e.target.value)} />
           </Field>
         </div>
         <p className="text-sm text-neutral-600">Changing a tier price updates every design on that tier that doesn't have its own price. Past sales keep the price they sold at.</p>
@@ -53,18 +59,18 @@ export default function Settings({ email }: { email: string }) {
             <option value={0}>Sunday</option><option value={1}>Monday</option>
           </select>
         </Field>
-        <Button size="lg" className="w-full" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</Button>
+        <Button size="lg" className="w-full" onClick={save} disabled={busy || badStd || badPrem}>{busy ? 'Saving…' : 'Save settings'}</Button>
       </Card>
 
       <Card>
-        <h2 className="font-brand text-xl font-bold">Account</h2>
+        <h2 className="font-brand text-2xl">Account</h2>
         <p className="mt-1 text-neutral-700">Signed in as <b>{email}</b></p>
-        <p className="mt-1 text-sm text-neutral-600">To add or change users, or reset a password, use the Supabase dashboard (see SETUP.md).</p>
+        <p className="mt-1 text-sm text-neutral-600">To change your password, sign out and tap “Forgot password?” on the login screen. To add a user, use the Supabase dashboard (see SETUP.md).</p>
         <Button variant="secondary" className="mt-3" onClick={() => signOut()}>Sign out</Button>
       </Card>
 
       <Card>
-        <h2 className="font-brand text-xl font-bold">Add to your phone</h2>
+        <h2 className="font-brand text-2xl">Add to your phone</h2>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-700">
           <li><b>iPhone (Safari):</b> tap Share, then “Add to Home Screen”.</li>
           <li><b>Android (Chrome):</b> tap the ⋮ menu, then “Add to Home screen” or “Install app”.</li>

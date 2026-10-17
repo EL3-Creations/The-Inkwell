@@ -23,7 +23,8 @@ export default function Inventory() {
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    return designs.filter((d) => {
+    const numeric = /^\d+$/.test(needle)
+    const out = designs.filter((d) => {
       if (d.archived !== showArchived) return false
       if (tier !== 'all' && d.tier !== tier) return false
       if (type !== 'all' && d.type !== type) return false
@@ -31,11 +32,14 @@ export default function Inventory() {
       if (stock === 'in' && d.quantity === 0) return false
       if (stock === 'out' && d.quantity > 0) return false
       if (needle) {
-        if (/^\d+$/.test(needle)) return String(d.number).startsWith(needle)
+        if (numeric) return String(d.number).startsWith(needle)
         return d.name.toLowerCase().includes(needle) || d.notes.toLowerCase().includes(needle)
       }
       return true
     })
+    // Typing "12" shows #12 first, then #120, #121…
+    if (numeric) out.sort((a, b) => Number(String(b.number) === needle) - Number(String(a.number) === needle) || a.number - b.number)
+    return out
   }, [designs, q, tier, type, safe, stock, showArchived])
 
   const filtersOn = tier !== 'all' || type !== 'all' || safe !== 'all' || stock !== 'all' || showArchived

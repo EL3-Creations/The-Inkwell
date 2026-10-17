@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import type { Design, DesignType, Tier } from './types'
+import { localDate } from './format'
 
 export interface ImportRow {
   number: number
@@ -7,7 +8,8 @@ export interface ImportRow {
   type: DesignType
   tier: Tier
   price_override: number | null
-  quantity: number
+  /** null = the quantity cell was blank: new designs get 1, existing designs keep their count. */
+  quantity: number | null
   shop_safe: boolean
   notes: string
 }
@@ -28,23 +30,30 @@ function parseBool(v: string, fallback: boolean): boolean | null {
   return null
 }
 
+function wholeNumber(v: string): number | null {
+  return /^\d+$/.test(v) ? Number(v) : null
+}
+
 /** Parse a designs CSV. Header names are case-insensitive; see sample-import.csv. */
 export function parseDesignsCsv(text: string): ImportResult {
   const parsed = Papa.parse<Record<string, string>>(text, {
     header: true,
-    skipEmptyLines: true,
-    transformHeader: (h) => h.trim().toLowerCase().replace(/[\s-]+/g, '_'),
+    skipEmptyLines: 'greedy',
+    transformHeader: (h) => h.replace(/^﻿/, '').trim().toLowerCase().replace(/[\s-]+/g, '_'),
   })
   const errors: string[] = parsed.errors.map((e) => `Line ${(e.row ?? 0) + 2}: ${e.message}`)
   const rows: ImportRow[] = []
   const seen = new Set<number>()
 
+  if (parsed.data.length === 0) errors.push('No rows found. Is the first line the header row (number, name, type, ...)?')
+  else if (!('number' in parsed.data[0])) errors.push('No "number" column found. Download the sample CSV to see the expected header row.')
+
   parsed.data.forEach((r, i) => {
     const line = i + 2
     const get = (k: string) => (r[k] ?? '').trim()
 
-    const number = parseInt(get('number'), 10)
-    if (!Number.isFinite(number) || number <= 0) { errors.push(`Line ${line}: "number" must be a whole number above 0`); return }
+    const number = wholeNumber(get('number'))
+    if (number === null || number <= 0) { errors.push(`Line ${line}: "number" must be a whole number above 0 (got "${get('number')}")`); return }
     if (seen.has(number)) { errors.push(`Line ${line}: number ${number} appears twice in the file`); return }
     seen.add(number)
 
@@ -65,8 +74,8 @@ export function parseDesignsCsv(text: string): ImportResult {
     }
 
     const qtyRaw = get('quantity')
-    const quantity = qtyRaw === '' ? 1 : parseInt(qtyRaw, 10)
-    if (!Number.isFinite(quantity) || quantity < 0) { errors.push(`Line ${line}: "quantity" must be 0 or more`); return }
+    const quantity = qtyRaw === '' ? null : wholeNumber(qtyRaw)
+    if (qtyRaw !== '' && quantity === null) { errors.push(`Line ${line}: "quantity" must be a whole number, 0 or more (got "${qtyRaw}")`); return }
 
     const shop_safe = parseBool(get('shop_safe'), true)
     if (shop_safe === null) { errors.push(`Line ${line}: "shop_safe" must be yes or no`); return }
@@ -77,8 +86,9 @@ export function parseDesignsCsv(text: string): ImportResult {
   return { rows, errors }
 }
 
+/** CSV text for download. escapeFormulae keeps notes like "=1+1" or "-small bubble" as text in Excel. */
 export function toCsv(rows: Record<string, unknown>[]): string {
-  return Papa.unparse(rows)
+  return Papa.unparse(rows, { escapeFormulae: true })
 }
 
 export function downloadText(filename: string, text: string, mime = 'text/csv;charset=utf-8') {
@@ -106,6 +116,6 @@ export function designsToCsvRows(designs: Design[], price: (d: Design) => number
     notes: d.notes,
     archived: d.archived ? 'yes' : 'no',
     photos: photoCount(d),
-    created: d.created_at.slice(0, 10),
+    created: localDate(d.created_at),
   }))
 }

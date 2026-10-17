@@ -12,7 +12,7 @@ A phone-first web app (installable PWA) for a two-person handmade pen and keycha
 - **Owes me / To ship**: unpaid claims with age; paid-but-unshipped, grouped by buyer.
 - **Dashboard**: stock, inventory value, sales this week/month, unpaid total, best sellers, "consider remaking".
 - **Import / Export**: CSV in for designs, CSV out for inventory and sales.
-- **Login**: email + password, owners only (public sign-up disabled in Supabase).
+- **Login**: email + password, owners only (public sign-up disabled in Supabase). Forgot-password emails a reset link that opens the app.
 
 ## How it's built
 
@@ -29,7 +29,8 @@ There is no custom server. The browser talks to Supabase directly; security live
 ## Folder map
 
 ```
-supabase/schema.sql     the whole database: tables, stock-safe functions, security, storage bucket
+supabase/schema.sql     the whole database: tables, stock-safe functions, guards, security, storage bucket
+supabase/migrations/    SQL to paste into a database created before each dated fix
 sample-import.csv       example bulk-import file
 src/
   App.tsx               login gate + routes
@@ -37,12 +38,14 @@ src/
     supabase.ts         Supabase client (or demo client)
     types.ts            data types + effectivePrice()
     api.ts              every write to the database lives here
+    bus.ts              tells data.tsx which table a write touched so the screen updates at once
+    clipboard.ts        copy-to-clipboard for DM reminders and packing lists
     data.tsx            loads all data once, keeps it fresh via realtime
     csv.ts              CSV parsing/export
     photos.ts           compress + upload
     format.ts           money/date helpers
     demo.ts             fake in-memory backend for demo mode (VITE_DEMO=true)
-  components/           Layout (nav), ui (buttons, fields), Modal, SaleModal, SaleRow, PhotoImg
+  components/           Layout (nav + sync bar), ui (buttons, fields), Modal, SaleModal, SaleRow, PhotoImg, ErrorBoundary
   pages/                one file per screen
 public/                 icons and logo (replace logo.svg / icon-*.png with the real logo)
 scripts/make-icons.mjs  regenerates placeholder icons (npm run icons)
@@ -65,9 +68,11 @@ Needs a `.env` file (copy `.env.example`) with your Supabase URL and anon key, o
 - `claim_design()` checks stock, lowers it, and writes the sale in one transaction, so two phones can't oversell.
 - `cancel_sale()` restores stock. `set_sale_quantity()` adjusts stock by the difference.
 - A design's price is its override if set, otherwise the tier price from Settings. Sales store the price at the time of sale.
+- Status moves (Mark paid, Mark shipped) only apply if the sale is still in the status the phone expected; a trigger refuses any change out of `cancelled`. So a stale screen can never resurrect a released claim.
+- Only one Live can be open at a time (partial unique index).
+- Tables are read in pages of 1000, so nothing is silently dropped as sales grow.
 
 ## Not in version 1 (room left for later)
 
 - No TikTok Shop API sync. Sales are entered by hand. A Vercel serverless function could be added alongside later without changing the app.
-- No password reset from inside the app (use the Supabase dashboard).
 - No materials cost / profit tracking.

@@ -57,7 +57,7 @@ export default function Dashboard() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <section>
-          <h2 className="mb-2 font-brand text-xl font-bold">Best sellers</h2>
+          <h2 className="mb-2 font-brand text-2xl">Best sellers</h2>
           {stats.best.length === 0 ? (
             <p className="text-neutral-500">No sales yet.</p>
           ) : (
@@ -81,7 +81,7 @@ export default function Dashboard() {
         </section>
 
         <section>
-          <h2 className="mb-2 font-brand text-xl font-bold">Consider remaking</h2>
+          <h2 className="mb-2 font-brand text-2xl">Consider remaking</h2>
           {stats.remake.length === 0 ? (
             <p className="text-neutral-500">Nothing is running low.</p>
           ) : (
@@ -108,7 +108,7 @@ function Stat({ label, value, sub, to, tone }: { label: string; value: string; s
   const inner = (
     <Card className={`h-full ${tone === 'rose' ? 'bg-accent-soft' : ''}`}>
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-600">{label}</div>
-      <div className="mt-1 font-brand text-3xl font-bold">{value}</div>
+      <div className="mt-1 text-3xl font-bold tabular-nums">{value}</div>
       {sub && <div className="text-sm text-neutral-600">{sub}</div>}
     </Card>
   )

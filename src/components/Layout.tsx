@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useData } from '../lib/data'
+import { useNow } from '../lib/hooks'
 import { Logo } from './ui'
 
 const links = [
@@ -15,7 +16,7 @@ const links = [
 ]
 
 export default function Layout({ email }: { email: string }) {
-  const { sales, activeSession, error } = useData()
+  const { sales, activeSession } = useData()
   const mainRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }) }, [pathname])
@@ -55,9 +56,7 @@ export default function Layout({ email }: { email: string }) {
           {activeSession && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">● LIVE</span>}
         </header>
 
-        {error && (
-          <div className="bg-red-600 px-4 py-2 text-sm text-white">Connection problem: {error}. Pull down or reopen to retry.</div>
-        )}
+        <SyncBar />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto px-4 pb-24 pt-4 md:px-8 md:pb-8">
           <div className="mx-auto max-w-5xl"><Outlet /></div>
@@ -85,6 +84,31 @@ export default function Layout({ email }: { email: string }) {
           ))}
         </nav>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Tells you when what you're looking at might be stale: a red bar when loading
+ * failed, an amber bar when live updates from the other phone are paused.
+ * Either way, one tap refreshes.
+ */
+function SyncBar() {
+  const { error, live, loading, lastSynced, refresh } = useData()
+  const now = useNow(10000)
+  const [busy, setBusy] = useState(false)
+  // Give the realtime socket a few seconds to connect before calling it "paused".
+  const pausedFor = live || !lastSynced ? 0 : now - lastSynced
+  if (loading) return null
+  if (!error && (live || pausedFor < 8000)) return null
+  const retry = async () => { setBusy(true); try { await refresh() } finally { setBusy(false) } }
+  const age = lastSynced ? Math.max(0, Math.round((now - lastSynced) / 60000)) : null
+  return (
+    <div className={`flex items-center justify-between gap-3 px-4 py-2 text-sm ${error ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900'}`}>
+      <span className="min-w-0 truncate">
+        {error ? `Connection problem: ${error}` : `Live updates paused${age != null ? ` · last synced ${age < 1 ? 'just now' : `${age} min ago`}` : ''}`}
+      </span>
+      <button type="button" onClick={retry} disabled={busy} className={`shrink-0 rounded-full border-2 px-3 py-1 font-semibold ${error ? 'border-white' : 'border-amber-900'}`}>{busy ? 'Refreshing…' : 'Refresh'}</button>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useData } from '../lib/data'
 import { cancelSale, markPaid, markShipped, setSaleQuantity, stepBack, updateSaleDetails } from '../lib/api'
 import { errMsg, useToast } from '../lib/toast'
-import { fmtMoney, normalizeHandle, toLocalInputValue } from '../lib/format'
+import { fmtMoney, normalizeHandle, parseMoney, toLocalInputValue } from '../lib/format'
 import { CHANNEL_LABEL, STATUS_LABEL, type Channel, type Sale, type SaleStatus } from '../lib/types'
 import { Badge, Button, Empty, Field, PageHeader, Segmented, Spinner } from '../components/ui'
 import SaleRow from '../components/SaleRow'
@@ -80,8 +80,12 @@ function EditSale({ sale, onClose }: { sale: Sale; onClose: () => void }) {
   }
 
   async function save() {
+    const unit = parseMoney(price)
+    if (unit === null) { toast('Enter a price like 25.00', 'error'); return }
+    const at = new Date(when)
+    if (Number.isNaN(at.getTime())) { toast('Pick a date', 'error'); return }
     await run(async () => {
-      await updateSaleDetails(sale.id, { buyer_handle: normalizeHandle(handle), channel, unit_price: Number(price) || 0, notes, claimed_at: new Date(when).toISOString() })
+      await updateSaleDetails(sale.id, { buyer_handle: normalizeHandle(handle), channel, unit_price: unit, notes, claimed_at: at.toISOString() })
       if (qty !== sale.quantity && sale.status !== 'cancelled') await setSaleQuantity(sale.id, qty)
     }, 'Saved')
   }

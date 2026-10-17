@@ -6,6 +6,7 @@ import { DataProvider } from './lib/data'
 import { ToastProvider } from './lib/toast'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import SetPassword from './pages/SetPassword'
 import NotConfigured from './pages/NotConfigured'
 import Dashboard from './pages/Dashboard'
 import Inventory from './pages/Inventory'
@@ -20,11 +21,16 @@ import More from './pages/More'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
+  const [recovery, setRecovery] = useState(false)
 
   useEffect(() => {
     if (!isConfigured) { setSession(null); return }
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s)
+      // Arriving from a "reset password" email link: ask for the new password before showing the app.
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
+    })
     return () => sub.subscription.unsubscribe()
   }, [])
 
@@ -37,6 +43,8 @@ export default function App() {
     <ToastProvider>
       {!session ? (
         <Login />
+      ) : recovery ? (
+        <SetPassword onDone={() => setRecovery(false)} />
       ) : (
         <DataProvider>
           <Routes>

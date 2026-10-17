@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useData } from '../lib/data'
 import { importDesigns } from '../lib/api'
 import { designsToCsvRows, downloadText, parseDesignsCsv, toCsv, type ImportResult } from '../lib/csv'
+import { localDate } from '../lib/format'
 import { errMsg, useToast } from '../lib/toast'
 import { CHANNEL_LABEL, STATUS_LABEL } from '../lib/types'
 import { Button, Card, PageHeader } from '../components/ui'
@@ -46,14 +47,14 @@ export default function ImportExport() {
 
   function exportInventory() {
     const rows = designsToCsvRows(designs, priceOf, (d) => photosByDesign.get(d.id)?.length ?? 0)
-    downloadText(`inkwell-inventory-${today()}.csv`, toCsv(rows))
+    downloadText(`inkwell-inventory-${localDate(new Date())}.csv`, toCsv(rows))
   }
 
   function exportSales() {
     const rows = sales.map((s) => {
       const d = designById.get(s.design_id)
       return {
-        date: s.claimed_at.slice(0, 10),
+        date: localDate(s.claimed_at),
         time: new Date(s.claimed_at).toLocaleTimeString('en-US'),
         number: d?.number ?? '',
         design: d?.name ?? '',
@@ -65,27 +66,28 @@ export default function ImportExport() {
         buyer: s.buyer_handle,
         channel: CHANNEL_LABEL[s.channel],
         status: STATUS_LABEL[s.status],
-        paid_at: s.paid_at ? s.paid_at.slice(0, 10) : '',
-        shipped_at: s.shipped_at ? s.shipped_at.slice(0, 10) : '',
-        cancelled_at: s.cancelled_at ? s.cancelled_at.slice(0, 10) : '',
+        paid_date: localDate(s.paid_at),
+        shipped_date: localDate(s.shipped_at),
+        cancelled_date: localDate(s.cancelled_at),
         notes: s.notes,
       }
     })
-    downloadText(`inkwell-sales-${today()}.csv`, toCsv(rows))
+    downloadText(`inkwell-sales-${localDate(new Date())}.csv`, toCsv(rows))
   }
 
   const newRows = preview?.rows.filter((r) => !activeNumbers.has(r.number)).length ?? 0
   const updRows = (preview?.rows.length ?? 0) - newRows
+  const keepQty = preview?.rows.filter((r) => activeNumbers.has(r.number) && r.quantity == null).length ?? 0
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader title="Import / Export" />
 
       <Card>
-        <h2 className="font-brand text-xl font-bold">Import designs from CSV</h2>
+        <h2 className="font-brand text-2xl">Import designs from CSV</h2>
         <p className="mt-1 text-sm text-neutral-600">
           Columns: <code>number, name, type, tier, price, quantity, shop_safe, notes</code>. Leave <code>price</code> blank to use the tier price.
-          Rows whose number matches an existing active design update it; the rest are added.
+          Rows whose number matches an existing active design update it; the rest are added. Leave <code>quantity</code> blank to keep an existing design's stock as it is.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => downloadText('inkwell-sample-import.csv', SAMPLE)}>Download sample CSV</Button>
@@ -101,17 +103,24 @@ export default function ImportExport() {
                 <ul className="mt-1 list-disc pl-5">{preview.errors.slice(0, 20).map((e, i) => <li key={i}>{e}</li>)}</ul>
               </div>
             )}
-            <p className="font-semibold">{preview.rows.length} rows ready: {newRows} new, {updRows} updates.</p>
+            <p className="font-semibold">{preview.rows.length} rows ready: {newRows} new, {updRows} updates{keepQty ? ` (${keepQty} keep their current stock)` : ''}.</p>
+            {updRows > 0 && updRows !== keepQty && (
+              <p className="mt-1 text-sm text-neutral-600">Updates with a quantity in the file will <b>replace</b> that design's stock count. Clear the quantity cells first if you only meant to fix names or prices.</p>
+            )}
             <div className="mt-2 max-h-64 overflow-auto rounded-xl border-2 border-black text-sm">
               <table className="w-full">
                 <thead className="sticky top-0 bg-black text-left text-white"><tr>{['#', 'Name', 'Type', 'Tier', 'Price', 'Qty', 'Shop-safe'].map((h) => <th key={h} className="px-2 py-1">{h}</th>)}</tr></thead>
                 <tbody>
-                  {preview.rows.map((r) => (
-                    <tr key={r.number} className={`border-t ${activeNumbers.has(r.number) ? 'bg-accent-soft' : ''}`}>
-                      <td className="px-2 py-1 font-bold">{r.number}</td><td className="px-2 py-1">{r.name}</td><td className="px-2 py-1">{r.type}</td>
-                      <td className="px-2 py-1">{r.tier}</td><td className="px-2 py-1">{r.price_override ?? 'tier'}</td><td className="px-2 py-1">{r.quantity}</td><td className="px-2 py-1">{r.shop_safe ? 'yes' : 'no'}</td>
-                    </tr>
-                  ))}
+                  {preview.rows.map((r) => {
+                    const upd = activeNumbers.has(r.number)
+                    return (
+                      <tr key={r.number} className={`border-t ${upd ? 'bg-accent-soft' : ''}`}>
+                        <td className="px-2 py-1 font-bold">{r.number}</td><td className="px-2 py-1">{r.name}</td><td className="px-2 py-1">{r.type}</td>
+                        <td className="px-2 py-1">{r.tier}</td><td className="px-2 py-1">{r.price_override ?? 'tier'}</td>
+                        <td className="px-2 py-1">{r.quantity ?? (upd ? 'keep' : 1)}</td><td className="px-2 py-1">{r.shop_safe ? 'yes' : 'no'}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -124,8 +133,8 @@ export default function ImportExport() {
       </Card>
 
       <Card>
-        <h2 className="font-brand text-xl font-bold">Export for records and taxes</h2>
-        <p className="mt-1 text-sm text-neutral-600">Downloads open in Excel, Numbers or Google Sheets.</p>
+        <h2 className="font-brand text-2xl">Export for records and taxes</h2>
+        <p className="mt-1 text-sm text-neutral-600">Downloads open in Excel, Numbers or Google Sheets. Dates are in your local time.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button variant="secondary" onClick={exportInventory}>Export inventory ({designs.length})</Button>
           <Button variant="secondary" onClick={exportSales}>Export sales ({sales.length})</Button>
@@ -134,5 +143,3 @@ export default function ImportExport() {
     </div>
   )
 }
-
-function today() { return new Date().toISOString().slice(0, 10) }

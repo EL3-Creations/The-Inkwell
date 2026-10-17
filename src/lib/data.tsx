@@ -1,10 +1,12 @@
 /**
  * Loads all app data once, keeps it in memory, and refreshes it whenever
- * Supabase reports a change (so both phones always show the same thing).
- * The whole dataset is small (hundreds of rows), so this is fast and simple.
+ * something changes: right after this phone writes (bus.ts), when Supabase
+ * reports a change from the other phone (realtime), and when the app comes
+ * back to the foreground. The whole dataset is small, so this stays simple.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { supabase } from './supabase'
+import { onChange } from './bus'
 import type { Design, DesignPhoto, LiveSession, Sale, Settings } from './types'
 import { effectivePrice } from './types'
 
@@ -16,6 +18,10 @@ interface DataState {
   sessions: LiveSession[]
   loading: boolean
   error: string | null
+  /** When data last loaded successfully (ms since epoch), 0 before the first load. */
+  lastSynced: number
+  /** True while the realtime connection to Supabase is up (changes from the other phone arrive live). */
+  live: boolean
   refresh: () => Promise<void>
   // Derived helpers
   designById: Map<string, Design>
@@ -29,6 +35,19 @@ interface DataState {
 const DataContext = createContext<DataState | null>(null)
 
 type Table = 'settings' | 'designs' | 'design_photos' | 'live_sessions' | 'sales'
+const TABLES: Table[] = ['settings', 'designs', 'design_photos', 'live_sessions', 'sales']
+
+/** Supabase returns at most 1000 rows per request; page until a short page comes back. */
+const PAGE = 1000
+async function all<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await page(from, from + PAGE - 1)
+    if (error) throw new Error(error.message)
+    out.push(...(data ?? []))
+    if (!data || data.length < PAGE) return out
+  }
+}
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -38,6 +57,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastSynced, setLastSynced] = useState(0)
+  const [live, setLive] = useState(false)
 
   const loadTable = useCallback(async (table: Table) => {
     switch (table) {
@@ -47,36 +68,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setSettings(data)
         break
       }
-      case 'designs': {
-        const { data, error } = await supabase.from('designs').select('*').order('number').returns<Design[]>()
-        if (error) throw error
-        setDesigns(data ?? [])
+      case 'designs':
+        setDesigns(await all<Design>((a, b) => supabase.from('designs').select('*').order('number').range(a, b)))
         break
-      }
-      case 'design_photos': {
-        const { data, error } = await supabase.from('design_photos').select('*').order('sort_order').returns<DesignPhoto[]>()
-        if (error) throw error
-        setPhotos(data ?? [])
+      case 'design_photos':
+        setPhotos(await all<DesignPhoto>((a, b) => supabase.from('design_photos').select('*').order('sort_order').range(a, b)))
         break
-      }
-      case 'live_sessions': {
-        const { data, error } = await supabase.from('live_sessions').select('*').order('started_at', { ascending: false }).returns<LiveSession[]>()
-        if (error) throw error
-        setSessions(data ?? [])
+      case 'live_sessions':
+        setSessions(await all<LiveSession>((a, b) => supabase.from('live_sessions').select('*').order('started_at', { ascending: false }).range(a, b)))
         break
-      }
-      case 'sales': {
-        const { data, error } = await supabase.from('sales').select('*').order('claimed_at', { ascending: false }).returns<Sale[]>()
-        if (error) throw error
-        setSales(data ?? [])
+      case 'sales':
+        setSales(await all<Sale>((a, b) => supabase.from('sales').select('*').order('claimed_at', { ascending: false }).range(a, b)))
         break
-      }
     }
+    setLastSynced(Date.now())
   }, [])
 
   const refresh = useCallback(async () => {
     try {
-      await Promise.all((['settings', 'designs', 'design_photos', 'live_sessions', 'sales'] as Table[]).map(loadTable))
+      await Promise.all(TABLES.map(loadTable))
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -85,7 +95,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [loadTable])
 
-  // Initial load + refetch when the app comes back to the foreground.
+  // Initial load + refetch when the app comes back to the foreground or back online.
   useEffect(() => {
     void refresh()
     const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
@@ -97,24 +107,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh])
 
-  // Realtime: when any table changes (from this phone or the other one), reload that table.
+  // Reload a table shortly after anything touches it (our own writes, or realtime from the other phone).
   const pending = useRef<Set<Table>>(new Set())
   const timer = useRef<number | null>(null)
+  const schedule = useCallback((table: string) => {
+    pending.current.add(table as Table)
+    if (timer.current) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      const tables = Array.from(pending.current)
+      pending.current.clear()
+      tables.forEach((t) => void loadTable(t).then(() => setError(null)).catch(() => void refresh()))
+    }, 120)
+  }, [loadTable, refresh])
+
+  useEffect(() => onChange(schedule), [schedule])
+
   useEffect(() => {
     const channel = supabase
       .channel('inkwell-db')
-      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-        pending.current.add(payload.table as Table)
-        if (timer.current) window.clearTimeout(timer.current)
-        timer.current = window.setTimeout(() => {
-          const tables = Array.from(pending.current)
-          pending.current.clear()
-          tables.forEach((t) => void loadTable(t).catch(() => void refresh()))
-        }, 150)
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => schedule(payload.table))
+      .subscribe((status) => {
+        const up = status === 'SUBSCRIBED'
+        setLive(up)
+        if (up) void refresh()   // catch up on anything missed while the socket was down
       })
-      .subscribe()
     return () => { void supabase.removeChannel(channel) }
-  }, [loadTable, refresh])
+  }, [schedule, refresh])
 
   const value = useMemo<DataState>(() => {
     const designById = new Map(designs.map((d) => [d.id, d]))
@@ -127,13 +145,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     for (const list of photosByDesign.values()) list.sort((a, b) => a.sort_order - b.sort_order)
     return {
-      settings, designs, photos, sales, sessions, loading, error, refresh,
+      settings, designs, photos, sales, sessions, loading, error, lastSynced, live, refresh,
       designById, designByNumber, photosByDesign,
       coverPhoto: (id) => photosByDesign.get(id)?.[0],
       priceOf: (d) => effectivePrice(d, settings),
       activeSession: sessions.find((s) => !s.ended_at) ?? null,
     }
-  }, [settings, designs, photos, sales, sessions, loading, error, refresh])
+  }, [settings, designs, photos, sales, sessions, loading, error, lastSynced, live, refresh])
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>
 }

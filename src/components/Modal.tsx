@@ -19,7 +19,7 @@ export default function Modal({ open, onClose, title, children }: { open: boolea
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-brand text-2xl font-bold">{title}</h2>
+          <h2 className="font-brand text-3xl">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-11 w-11 items-center justify-center rounded-full text-2xl hover:bg-neutral-100">×</button>
         </div>
         {children}

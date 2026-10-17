@@ -4,12 +4,14 @@ import { cancelSale, markPaid } from '../lib/api'
 import { errMsg, useToast } from '../lib/toast'
 import { fmtMoney, timeAgo } from '../lib/format'
 import { useNow } from '../lib/hooks'
+import { TIER_LABEL, type Sale } from '../lib/types'
 import { Button, Empty, PageHeader, Spinner } from '../components/ui'
 import SaleRow from '../components/SaleRow'
+import CopyButton from '../components/CopyButton'
 
 /** Claims that haven't been paid yet, grouped by buyer, oldest first. */
 export default function Owes() {
-  const { sales, loading } = useData()
+  const { sales, loading, designById, settings } = useData()
   const toast = useToast()
   const now = useNow()
 
@@ -34,6 +36,18 @@ export default function Owes() {
     try { await cancelSale(id); toast('Back in stock') } catch (e) { toast(errMsg(e), 'error') }
   }
 
+  /** A ready-to-paste DM telling the buyer which listing to check out. */
+  function reminder(handle: string, list: Sale[]): string {
+    const lines = list.map((s) => {
+      const d = designById.get(s.design_id)
+      const tier = d ? TIER_LABEL[d.tier] : ''
+      const what = d ? `#${d.number} ${d.name}`.trim() : 'your piece'
+      return `• ${what}${s.quantity > 1 ? ` ×${s.quantity}` : ''} – ${fmtMoney(Number(s.unit_price) * s.quantity)} (check out the ${tier} ${d?.type ?? 'pen'} listing)`
+    })
+    const sub = list.reduce((n, s) => n + Number(s.unit_price) * s.quantity, 0)
+    return `Hi ${handle}! Thanks for claiming on our Live 🖤 Here's what's on hold for you:\n${lines.join('\n')}\nTotal ${fmtMoney(sub)}. Grab the matching listing in our TikTok Shop and we'll ship it right out. – ${settings?.shop_name ?? 'The Inkwell'}`
+  }
+
   if (loading) return <Spinner />
   return (
     <div className="mx-auto max-w-3xl">
@@ -44,9 +58,12 @@ export default function Owes() {
             const sub = list.reduce((n, s) => n + Number(s.unit_price) * s.quantity, 0)
             return (
               <section key={handle}>
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="text-lg font-bold">{handle} <span className="font-normal text-neutral-600">· {fmtMoney(sub)}</span></div>
-                  {list.length > 1 && <Button size="sm" onClick={() => paid(list.map((s) => s.id))}>Mark all paid</Button>}
+                  <div className="flex gap-2">
+                    <CopyButton label="Copy reminder" text={() => reminder(handle, list)} />
+                    {list.length > 1 && <Button size="sm" onClick={() => paid(list.map((s) => s.id))}>Mark all paid</Button>}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {list.map((s) => (

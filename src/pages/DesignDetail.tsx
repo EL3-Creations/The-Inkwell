@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useData } from '../lib/data'
 import { addPhoto, createDesign, deleteDesign, removePhoto, setArchived, setCoverPhoto, updateDesign, type DesignInput } from '../lib/api'
 import { errMsg, useToast } from '../lib/toast'
-import { fmtMoney, fmtDateTime } from '../lib/format'
+import { fmtMoney, fmtDateTime, parseMoney } from '../lib/format'
 import { photoUrl } from '../lib/supabase'
 import { CHANNEL_LABEL, STATUS_LABEL, type Design, type DesignPhoto, type DesignType, type Tier } from '../lib/types'
 import { Badge, Button, Field, PageHeader, Segmented, Spinner } from '../components/ui'
@@ -27,6 +27,7 @@ export default function DesignDetail() {
   const [uploading, setUploading] = useState(0)
   const cameraRef = useRef<HTMLInputElement>(null)
   const uploadRef = useRef<HTMLInputElement>(null)
+  const suggested = useRef(false)
 
   // Load the existing design into the form (once, or when it changes on the other phone and we haven't edited).
   useEffect(() => {
@@ -38,14 +39,15 @@ export default function DesignDetail() {
     setPriceStr(existing.price_override != null ? Number(existing.price_override).toFixed(2) : '')
   }, [existing, dirty])
 
-  // Suggest the next free pegboard number for a new design.
+  // Suggest the next free pegboard number for a new design, once, so the field can still be cleared and retyped.
   useEffect(() => {
-    if (!isNew || form.number) return
+    if (!isNew || loading || suggested.current) return
+    suggested.current = true
     const used = new Set(designs.filter((d) => !d.archived).map((d) => d.number))
     let n = 1
     while (used.has(n)) n++
     setForm((f) => ({ ...f, number: n }))
-  }, [isNew, designs, form.number])
+  }, [isNew, loading, designs])
 
   const set = <K extends keyof DesignInput>(k: K, v: DesignInput[K]) => { setForm((f) => ({ ...f, [k]: v })); setDirty(true) }
 
@@ -54,14 +56,17 @@ export default function DesignDetail() {
     [designs, form.number, id],
   )
   const tierPrice = settings ? Number(form.tier === 'premium' ? settings.premium_price : settings.standard_price) : 0
+  const priceValue = priceStr.trim() === '' ? null : parseMoney(priceStr)
+  const priceInvalid = priceStr.trim() !== '' && priceValue === null
   const photos = id ? photosByDesign.get(id) ?? [] : []
   const history = useMemo(() => sales.filter((s) => s.design_id === id), [sales, id])
 
   async function save() {
     if (numberTaken) { toast(`Number ${form.number} is already used by another active design`, 'error'); return }
+    if (priceInvalid) { toast('Enter a price like 22.00, or leave it blank for the tier price', 'error'); return }
     setBusy(true)
     try {
-      const payload: DesignInput = { ...form, price_override: priceStr.trim() === '' ? null : Number(priceStr) }
+      const payload: DesignInput = { ...form, price_override: priceValue }
       if (isNew) {
         const d = await createDesign(payload)
         toast('Design added. Now add photos.')
@@ -82,9 +87,10 @@ export default function DesignDetail() {
     if (!files || !existing) return
     const list = Array.from(files)
     setUploading(list.length)
-    for (const f of list) {
+    const start = photos.length
+    for (const [i, f] of list.entries()) {
       try {
-        await addPhoto(existing, f, photos.length)
+        await addPhoto(existing, f, start + i)
       } catch (e) {
         toast(`Photo failed: ${errMsg(e)}`, 'error')
       } finally {
@@ -135,7 +141,7 @@ export default function DesignDetail() {
       {!isNew && (
         <section className="mb-5">
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="font-brand text-xl font-bold">Photos</h2>
+            <h2 className="font-brand text-2xl">Photos</h2>
             <div className="flex gap-2">
               <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFiles(e.target.files)} />
               <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
@@ -188,8 +194,13 @@ export default function DesignDetail() {
             <Segmented<Tier> value={form.tier} onChange={(v) => set('tier', v)} options={[{ value: 'standard', label: `Standard` }, { value: 'premium', label: `Premium` }]} />
           </Field>
         </div>
-        <Field label="Price" hint={priceStr.trim() === '' ? `Using the ${form.tier} tier price, ${fmtMoney(tierPrice)}. Type a price to override it.` : `Overriding the tier price (${fmtMoney(tierPrice)}). Clear to use the tier price.`}>
-          <input className="field" inputMode="decimal" placeholder={tierPrice.toFixed(2)} value={priceStr} onChange={(e) => { setPriceStr(e.target.value); setDirty(true) }} />
+        <Field
+          label="Price"
+          hint={priceInvalid ? 'That is not a price. Type a number like 22.00, or clear it to use the tier price.'
+            : priceStr.trim() === '' ? `Using the ${form.tier} tier price, ${fmtMoney(tierPrice)}. Type a price to override it.`
+            : `Overriding the tier price (${fmtMoney(tierPrice)}). Clear to use the tier price.`}
+        >
+          <input className={`field ${priceInvalid ? 'border-red-600' : ''}`} inputMode="decimal" placeholder={tierPrice.toFixed(2)} value={priceStr} onChange={(e) => { setPriceStr(e.target.value); setDirty(true) }} />
         </Field>
         <label className="flex min-h-12 cursor-pointer items-center gap-3 rounded-xl border-2 border-black px-3">
           <input type="checkbox" className="h-6 w-6" checked={form.shop_safe} onChange={(e) => set('shop_safe', e.target.checked)} />
@@ -200,7 +211,7 @@ export default function DesignDetail() {
           <textarea className="field" rows={3} value={form.notes} onChange={(e) => set('notes', e.target.value)} />
         </Field>
         <div className="flex gap-2">
-          <Button size="lg" className="flex-1" onClick={save} disabled={busy || !form.number || numberTaken}>{busy ? 'Saving…' : isNew ? 'Add design' : 'Save changes'}</Button>
+          <Button size="lg" className="flex-1" onClick={save} disabled={busy || !form.number || numberTaken || priceInvalid}>{busy ? 'Saving…' : isNew ? 'Add design' : 'Save changes'}</Button>
           {!isNew && dirty && <Button size="lg" variant="secondary" onClick={() => setDirty(false)}>Discard</Button>}
         </div>
       </section>
@@ -209,7 +220,7 @@ export default function DesignDetail() {
       {!isNew && existing && (
         <>
           <section className="mt-6">
-            <h2 className="mb-2 font-brand text-xl font-bold">Sales history</h2>
+            <h2 className="mb-2 font-brand text-2xl">Sales history</h2>
             {history.length === 0 ? <p className="text-neutral-500">No sales yet.</p> : (
               <div className="divide-y-2 divide-neutral-200 rounded-2xl border-2 border-black">
                 {history.map((s) => (

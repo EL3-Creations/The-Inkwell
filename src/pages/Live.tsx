@@ -54,6 +54,7 @@ export default function Live() {
       })
       toast(`Claimed #${design.number} for ${normalizeHandle(handle)}`)
       setNumberStr(''); setHandle(''); setQty(1)
+      handleRef.current?.blur()   // put the keyboard away so the keypad is ready for the next number
     } catch (e) {
       toast(errMsg(e), 'error')
     } finally {
@@ -96,11 +97,12 @@ export default function Live() {
         </Card>
         {past.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-2 font-brand text-xl font-bold">Past Lives</h2>
+            <h2 className="mb-2 font-brand text-2xl">Past Lives</h2>
             <div className="space-y-2">
               {past.map((s) => {
                 const list = sales.filter((x) => x.live_session_id === s.id && x.status !== 'cancelled')
                 const t = list.reduce((n, x) => n + Number(x.unit_price) * x.quantity, 0)
+                const unpaid = list.filter((x) => x.status === 'claimed').length
                 return (
                   <div key={s.id} className="flex items-center justify-between rounded-2xl border-2 border-black p-3">
                     <div>
@@ -109,7 +111,7 @@ export default function Live() {
                     </div>
                     <div className="text-right">
                       <div className="font-bold">{fmtMoney(t)}</div>
-                      <div className="text-sm text-neutral-600">{list.length} claims</div>
+                      <div className="text-sm text-neutral-600">{list.length} claims{unpaid ? <span className="font-semibold text-red-700"> · {unpaid} unpaid</span> : ''}</div>
                     </div>
                   </div>
                 )
@@ -122,13 +124,13 @@ export default function Live() {
   }
 
   // ---------- Live ----------
-  const mins = Math.floor((now - new Date(activeSession.started_at).getTime()) / 60000)
+  const mins = Math.max(0, Math.floor((now - new Date(activeSession.started_at).getTime()) / 60000))
   return (
     <div className="mx-auto max-w-5xl md:grid md:grid-cols-2 md:gap-6">
       <div>
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2 font-brand text-2xl font-bold"><span className="text-red-600">●</span> {activeSession.label || 'Live'}</div>
+            <div className="flex items-center gap-2 font-brand text-3xl"><span className="text-red-600">●</span> {activeSession.label || 'Live'}</div>
             <div className="text-sm text-neutral-600">{mins} min · {pieces} pieces · {fmtMoney(total)}</div>
           </div>
           <Button variant="secondary" size="sm" onClick={doEnd}>End Live</Button>
@@ -141,7 +143,7 @@ export default function Live() {
               <PhotoImg designId={design.id} className="h-20 w-20 shrink-0 rounded-xl" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xl font-bold">#{design.number} {design.name}</div>
-                <div className="text-base">{fmtMoney(priceOf(design))} · <span className={design.quantity === 0 ? 'font-bold text-red-700' : ''}>{design.quantity} left</span></div>
+                <div className="text-base">{fmtMoney(priceOf(design))} · <span className={design.quantity === 0 ? 'font-bold text-red-700' : ''}>{design.quantity} left</span>{!design.shop_safe && <span className="ml-2 rounded-full bg-red-600 px-2 text-xs font-bold text-white">No Shop</span>}</div>
                 {design.quantity > 1 && (
                   <div className="mt-1 flex items-center gap-2 text-sm">
                     Qty
@@ -208,7 +210,7 @@ export default function Live() {
 
       {/* Running list */}
       <div className="mt-6 md:mt-0">
-        <h2 className="mb-2 flex items-center justify-between font-brand text-xl font-bold">
+        <h2 className="mb-2 flex items-center justify-between font-brand text-2xl">
           <span>This Live's claims</span>
           <span>{claims.length} · {fmtMoney(total)}</span>
         </h2>
@@ -228,7 +230,7 @@ export default function Live() {
                     <div className="min-w-0 flex-1 truncate text-sm text-neutral-700">{s.buyer_handle} · {fmtTime(s.claimed_at)}</div>
                     {s.status === 'claimed' ? (
                       <>
-                        <Button size="sm" onClick={() => markPaid(s.id).catch((e) => toast(errMsg(e), 'error'))}>Paid</Button>
+                        <Button size="sm" onClick={() => markPaid(s.id).then(() => toast('Marked paid')).catch((e) => toast(errMsg(e), 'error'))}>Paid</Button>
                         <Button size="sm" variant="danger" onClick={() => doUndo(s.id)}>Undo</Button>
                       </>
                     ) : (

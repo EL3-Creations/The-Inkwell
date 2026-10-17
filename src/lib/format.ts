@@ -54,8 +54,25 @@ export function normalizeHandle(raw: string): string {
   return t ? '@' + t : ''
 }
 
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** "2026-11-28" in the phone's own time zone (never the UTC date). */
+export function localDate(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  const x = typeof d === 'string' ? new Date(d) : d
+  if (Number.isNaN(x.getTime())) return ''
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`
+}
+
 /** Format a Date for an <input type="datetime-local"> (local time). */
 export function toLocalInputValue(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${localDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Parse a money field typed by a person: "$22", "22.5", " 40 ". Returns null when it is not a number. */
+export function parseMoney(raw: string): number | null {
+  const t = raw.replace(/[$,\s]/g, '')
+  if (t === '') return null
+  const n = Number(t)
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null
 }

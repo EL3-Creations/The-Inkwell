@@ -31,10 +31,12 @@ The code is now on GitHub. Later, whenever the code changes, GitHub Desktop will
    - **Region:** pick the one closest to you (for the US, `East US` or `West US`).
    - Click **Create new project**. Wait about two minutes for the green "Project is ready" status.
 3. **Paste the schema.** In the left sidebar click **SQL Editor** (icon looks like a terminal). Click **New query**. On your computer open the file `supabase\schema.sql` in Notepad, select all (Ctrl+A), copy (Ctrl+C). Back in the browser, click inside the big editor box, paste (Ctrl+V), then click the green **Run** button (bottom right). You should see "Success. No rows returned". If you see a red error, copy the whole message and send it to me.
+
+   > **Already created your database before 17 Oct 2026?** Don't re-run the whole file. Instead open `supabasemigrations6-10-17-launch-fixes.sql`, paste that into a new query and Run it. It adds the safety rules (no un-cancelling a sale, one Live at a time, photo listing for owners only).
 4. **Turn off public sign-ups** so only you two can get in. Sidebar → **Authentication** → **Sign In / Providers** (sometimes labelled **Providers**). Click **Email**. Turn **OFF** the switch "Allow new users to sign up". Leave "Confirm email" on or off; it doesn't matter because you create accounts by hand. Click **Save**.
 5. **Create your two accounts.** Sidebar → **Authentication** → **Users** → **Add user** → **Create new user**.
    - Type your email and choose a password (8+ characters). Tick **Auto Confirm User**. Click **Create user**.
-   - Repeat for your wife's email and her password. Tell her the password; she can't change it herself in version 1 (you can reset it here anytime: click the user → **Reset password**).
+   - Repeat for your wife's email and her password. Tell her the password. Either of you can change it later from the login screen with **Forgot password?** (after Part 3 step 6 below).
 6. **Copy the two values the app needs.** Sidebar → **Project Settings** (gear icon at the bottom) → **API Keys**. You need:
    - **Project URL**: `https://` + your project ref + `.supabase.co`. It is shown under **Project Settings → Data API**, and it is also the middle part of the dashboard's web address.
    - **Publishable key**: on the **API Keys** page, the row named `default` under **Publishable key** (starts with `sb_publishable_`). Click the copy icon next to it. Never use the **Secret keys** row.
@@ -63,6 +65,7 @@ The code is now on GitHub. Later, whenever the code changes, GitHub Desktop will
    - Click **Deploy**. Wait about a minute until you see confetti.
 4. Click **Continue to Dashboard**, then click the **Visit** button (or the address under **Domains**, something like `inkwell-xxxx.vercel.app`). That is your app. Bookmark it.
 5. Optional, nicer address: in the project's **Settings → Domains**, click **Edit** on the `.vercel.app` domain and rename it to something like `the-inkwell.vercel.app` if it's free.
+6. **Tell Supabase the app's address** so "Forgot password?" emails link back to the app. In Supabase: sidebar **Authentication → URL Configuration**. Set **Site URL** to your Vercel address (for example `https://the-inkwell.vercel.app`, no trailing slash) and click **Save**. Without this, the reset link opens the wrong page.
 
 ---
 
@@ -99,7 +102,7 @@ The code is now on GitHub. Later, whenever the code changes, GitHub Desktop will
 
 4. Save as CSV (in Excel: **File → Save As → CSV UTF-8**).
 5. Back in the app click **Choose CSV file…**, pick it, check the preview (new rows in white, updates in pink, problems listed in red), then click **Import**.
-6. Re-importing the same file later is safe: rows with an existing number update that design, so you can fix names or quantities in bulk.
+6. Re-importing later: rows with an existing number update that design. **Clear the `quantity` cells first** if you only mean to fix names or prices; a filled-in quantity replaces the stock count, a blank one keeps whatever the app says now. The preview tells you how many rows keep their stock.
 
 **Photos** are added per design: open the design, tap **Take photo** (camera) or **Upload**. Photos are compressed on the phone before upload, so 300 photos use well under the free limit.
 
@@ -117,13 +120,15 @@ Do this on your phone with your wife on hers, a few days before Thanksgiving wee
 - [ ] Live mode: Start Live, tap a number, enter a handle, Claim. The other phone sees the claim and the stock drop.
 - [ ] Claim the same number again until it says **Sold out**. It refuses to oversell.
 - [ ] Tap **Undo** on a claim. Stock goes back up.
-- [ ] Owes me: Mark paid moves it to To ship. Release puts the piece back in stock.
+- [ ] Owes me: Mark paid moves it to To ship. Release puts the piece back in stock. **Copy reminder** pastes a ready-made message into a TikTok DM.
+- [ ] Both phones: release a claim on one phone, then tap Mark paid on the same claim on the other phone. It must refuse with "already changed on the other phone".
 - [ ] To ship: Mark shipped. The Dashboard "To ship" count drops.
 - [ ] Sales → Add sale with channel TikTok Shop, status Paid. It appears in To ship.
 - [ ] End Live. The Live appears under Past Lives with the right total.
 - [ ] Import / Export → Export sales and Export inventory open in Excel.
 - [ ] Turn on airplane mode, open the app: it still opens (cached) and shows a red connection bar. Turn airplane mode off: it recovers.
 - [ ] Try the app address in a private/incognito window without signing in: you only see the login screen.
+- [ ] Sign out, tap **Forgot password?**, open the email on the same phone, set a new password, sign in with it.
 
 ---
 
@@ -139,12 +144,14 @@ Do this on your phone with your wife on hers, a few days before Thanksgiving wee
 | See who hasn't paid | Owes me |
 | See what to pack | To ship |
 | Fix a mistake on a sale | Sales → tap the sale → edit or Cancel |
-| Reset a password | Supabase → Authentication → Users → click user → Reset password |
+| Change a password | Login screen → Forgot password? (or Supabase → Authentication → Users → click user → Reset password) |
 | Add a third person later | Supabase → Authentication → Users → Add user |
 
 ## When something goes wrong
 
 - **"Connection problem" red bar:** your phone is offline, or the Supabase project is paused (see the free-tier note in Part 2). Open the Supabase dashboard and restore it.
+- **"Live updates paused" amber bar:** the app is working but not hearing changes from the other phone right now. Tap **Refresh**; it also catches up by itself when you reopen the app.
+- **"That sale was already changed on the other phone":** you both acted on the same claim within a few seconds. The list refreshed; look again before tapping.
 - **Photo upload fails:** check the phone has signal; try Upload instead of Take photo. Max 2 MB after compression, which is never hit in practice.
 - **"Only N left in stock":** two people claimed the last piece at the same moment. The second one loses; nothing is double-sold.
 - **I changed code and want it online:** GitHub Desktop → Commit → Push. Vercel rebuilds in about a minute.

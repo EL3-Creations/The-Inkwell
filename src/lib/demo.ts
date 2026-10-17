@@ -1,7 +1,8 @@
 /**
  * DEMO MODE: a fake in-memory "Supabase" so the app can be tried with no database.
  * Turned on only when VITE_DEMO=true. Any email/password signs in. Nothing is saved.
- * The real app never touches this file.
+ * The real app never touches this file. It mirrors the database rules that matter
+ * (stock checks, one open Live, no un-cancelling) so demo behaviour matches production.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -76,10 +77,25 @@ export function createDemoClient(): SupabaseClient {
   const authListeners: ((ev: string, s: Row | null) => void)[] = []
   const setSession = (s: Row | null) => { session = s; authListeners.forEach((l) => l(s ? 'SIGNED_IN' : 'SIGNED_OUT', s)) }
 
+  /** The database rules that schema.sql enforces with constraints and triggers. */
+  function check(table: string, op: 'insert' | 'update', row: Row, patch: Row): string | null {
+    if (table === 'sales' && op === 'update' && row.status === 'cancelled' && patch.status && patch.status !== 'cancelled') {
+      return 'This sale was already cancelled and its stock returned. Record a new sale instead.'
+    }
+    if (table === 'live_sessions' && op === 'insert' && store.live_sessions.some((s) => !s.ended_at)) {
+      return 'duplicate key value violates unique constraint "live_sessions_one_open_idx"'
+    }
+    if (table === 'designs' && op === 'insert' && store.designs.some((d) => !d.archived && d.number === patch.number)) {
+      return 'duplicate key value violates unique constraint "designs_active_number_idx"'
+    }
+    return null
+  }
+
   class Query {
     private op: 'select' | 'insert' | 'update' | 'delete' = 'select'
     private filters: [string, unknown][] = []
     private orderBy: { col: string; asc: boolean } | null = null
+    private slice: [number, number] | null = null
     private payload: unknown = null
     private mode: 'many' | 'single' | 'maybe' = 'many'
     constructor(private table: string) {}
@@ -89,6 +105,7 @@ export function createDemoClient(): SupabaseClient {
     delete() { this.op = 'delete'; return this }
     eq(col: string, val: unknown) { this.filters.push([col, val]); return this }
     order(col: string, opts?: { ascending?: boolean }) { this.orderBy = { col, asc: opts?.ascending !== false }; return this }
+    range(from: number, to: number) { this.slice = [from, to]; return this }
     single() { this.mode = 'single'; return this }
     maybeSingle() { this.mode = 'maybe'; return this }
     returns() { return this }
@@ -98,11 +115,13 @@ export function createDemoClient(): SupabaseClient {
       let out: Row[]
       if (this.op === 'insert') {
         const list = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[]
+        for (const r of list) { const err = check(this.table, 'insert', r, r); if (err) return { data: null, error: { message: err, code: '23505' } } }
         out = list.map((r) => ({ id: uuid(), created_at: nowIso(), updated_at: nowIso(), ...(this.table === 'live_sessions' ? { started_at: nowIso(), ended_at: null } : {}), ...r }))
         rows.push(...out)
         emit(this.table)
       } else if (this.op === 'update') {
         out = rows.filter(match)
+        for (const r of out) { const err = check(this.table, 'update', r, this.payload as Row); if (err) return { data: null, error: { message: err } } }
         out.forEach((r) => Object.assign(r, this.payload as Row, { updated_at: nowIso() }))
         emit(this.table)
       } else if (this.op === 'delete') {
@@ -115,6 +134,7 @@ export function createDemoClient(): SupabaseClient {
           const { col, asc } = this.orderBy
           out = [...out].sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0) * (asc ? 1 : -1))
         }
+        if (this.slice) out = out.slice(this.slice[0], this.slice[1] + 1)
       }
       const data = this.mode === 'many' ? out.map((r) => ({ ...r })) : out[0] ? { ...out[0] } : null
       if (this.mode === 'single' && !data) return { data: null, error: { message: 'Row not found' } }
@@ -157,6 +177,7 @@ export function createDemoClient(): SupabaseClient {
     if (fn === 'set_sale_quantity') {
       const s = sales.find((x) => x.id === args.p_sale_id)
       if (!s) return err('Sale not found')
+      if (s.status === 'cancelled') return err('Sale is cancelled')
       const d = designs.find((x) => x.id === s.design_id)!
       const diff = args.p_quantity - s.quantity
       if (d.quantity - diff < 0) return err(`Only ${d.quantity} left in stock`)
@@ -181,6 +202,8 @@ export function createDemoClient(): SupabaseClient {
         return { error: null }
       },
       signOut: async () => { setSession(null) },
+      resetPasswordForEmail: async () => ({ error: null }),
+      updateUser: async () => ({ error: null }),
     },
     storage: {
       from: () => ({
@@ -192,7 +215,7 @@ export function createDemoClient(): SupabaseClient {
     channel: () => {
       const ch = {
         on: (_e: string, _f: unknown, cb: (p: { table: string }) => void) => { listeners.push(cb); return ch },
-        subscribe: () => ch,
+        subscribe: (cb?: (status: string) => void) => { cb?.('SUBSCRIBED'); return ch },
       }
       return ch
     },

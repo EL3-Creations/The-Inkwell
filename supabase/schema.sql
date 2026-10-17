@@ -233,7 +233,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values ('photos', 'photos', true, 2097152, array['image/jpeg','image/png','image/webp'])
 on conflict (id) do nothing;
 
-create policy "photos read"   on storage.objects for select using (bucket_id = 'photos');
+create policy "photos read"   on storage.objects for select to authenticated using (bucket_id = 'photos');
 create policy "photos insert" on storage.objects for insert to authenticated with check (bucket_id = 'photos');
 create policy "photos update" on storage.objects for update to authenticated using (bucket_id = 'photos');
 create policy "photos delete" on storage.objects for delete to authenticated using (bucket_id = 'photos');
@@ -246,3 +246,22 @@ alter publication supabase_realtime add table public.designs;
 alter publication supabase_realtime add table public.design_photos;
 alter publication supabase_realtime add table public.live_sessions;
 alter publication supabase_realtime add table public.sales;
+
+-- ============================================================
+--  Guards (added 17 Oct 2026; see supabase/migrations).
+-- ============================================================
+-- A cancelled sale can never be flipped back to claimed / paid / shipped.
+create or replace function public.sales_guard_cancelled() returns trigger
+language plpgsql as $$
+begin
+  if old.status = 'cancelled' and new.status <> 'cancelled' then
+    raise exception 'This sale was already cancelled and its stock returned. Record a new sale instead.';
+  end if;
+  return new;
+end $$;
+create trigger sales_guard_cancelled before update on public.sales
+  for each row execute function public.sales_guard_cancelled();
+
+-- Only one Live can be open at a time.
+create unique index live_sessions_one_open_idx
+  on public.live_sessions ((true)) where ended_at is null;

@@ -5,7 +5,7 @@ import { Button, Field } from './ui'
 import { useData } from '../lib/data'
 import { claim } from '../lib/api'
 import { errMsg, useToast } from '../lib/toast'
-import { fmtMoney, normalizeHandle, toLocalInputValue } from '../lib/format'
+import { fmtMoney, normalizeHandle, parseMoney, toLocalInputValue } from '../lib/format'
 import { CHANNEL_LABEL, type Channel, type Design, type SaleStatus } from '../lib/types'
 
 /**
@@ -47,8 +47,12 @@ export default function SaleModal({ open, onClose, preset }: { open: boolean; on
   // Live channel usually means "claimed, not yet paid".
   useEffect(() => { setStatus(channel === 'live' ? 'claimed' : 'paid') }, [channel])
 
+  const unit = parseMoney(price)
+  const when_ = new Date(when)
+  const badWhen = Number.isNaN(when_.getTime())
+
   async function submit() {
-    if (!design) return
+    if (!design || unit === null || badWhen) return
     setBusy(true)
     try {
       await claim({
@@ -56,10 +60,10 @@ export default function SaleModal({ open, onClose, preset }: { open: boolean; on
         quantity: qty,
         buyerHandle: normalizeHandle(handle),
         channel,
-        unitPrice: Number(price) || 0,
+        unitPrice: unit,
         status,
         notes,
-        claimedAt: new Date(when),
+        claimedAt: when_,
         liveSessionId: channel === 'live' ? activeSession?.id ?? null : null,
       })
       toast(`Sale recorded: #${design.number} ${design.name}`)
@@ -122,8 +126,8 @@ export default function SaleModal({ open, onClose, preset }: { open: boolean; on
         <Field label="Notes">
           <input className="field" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
-        <Button size="lg" className="w-full" disabled={!design || busy || design.quantity < qty} onClick={submit}>
-          {busy ? 'Saving…' : design && design.quantity < qty ? `Only ${design.quantity} in stock` : `Record sale · ${fmtMoney((Number(price) || 0) * qty)}`}
+        <Button size="lg" className="w-full" disabled={!design || busy || design.quantity < qty || unit === null || badWhen} onClick={submit}>
+          {busy ? 'Saving…' : design && design.quantity < qty ? `Only ${design.quantity} in stock` : unit === null ? 'Enter a price' : badWhen ? 'Pick a date' : `Record sale · ${fmtMoney(unit * qty)}`}
         </Button>
       </div>
     </Modal>
